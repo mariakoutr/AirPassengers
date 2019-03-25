@@ -1,0 +1,143 @@
+# AirPassenger Time Series Analysis
+
+## Introduction 
+
+We used the inbuild R dataset "AirPassengers". It is a timeseries that presents the number of Air Passengers per month for 1949 to 1960. We analyze the data, and attempt to make a forecast for the next 10 years after the actual data. 
+
+## Load the data and the libraries 
+
+```{r}
+data("AirPassengers")
+air <- AirPassengers
+
+```
+
+```{r}
+library(tseries)
+library(forecast)
+
+```
+
+## Explore the data 
+
+We examine the class of the data set, the start and the end of the data set. 
+```{r}
+class(air)
+start(air)
+end(air)
+```
+
+As  we see that our data is a time series and we examine its cycle. 
+```{r}
+frequency(air)
+```
+The cycle of the time series is 12 months a year. 
+We summarize our data. 
+
+```{r}
+summary(air)
+```
+
+We make a plot of the time series, with a line to fit the data. 
+
+```{r}
+plot(air, ylab = "Number of passengers", main = "Air Passengers")
+abline(reg = lm(air~time(air)))
+```
+
+We examine the cycle across years and we make a plot of the mean of the number of passengers with time. I also make a plot of the variance of the number of passengers with time.  
+
+```{r}
+cycle(air)
+plot(aggregate(air, FUN = mean), ylab = "Number of passenger", main = "Air Passengers")
+plot(aggregate(air, FUN = var), ylab = "Variance of the Number of passenger", main = "Air Passengers Variance")
+```
+
+We make a boxplot to examine the seasonal effect. 
+
+```{r}
+boxplot(air~cycle(air), ylab = "Number of passenger", xlab = "Months", main = "Boxplot of Air Passengers by month")
+```
+
+Observations  
+1. The number of passengers increases every year, which shows a trend component. 2. The variance of the number of passengers increases every year. 
+3. In the boxplot we can see that the mean and variance values in July and August are higher from the rest oof the months.  
+
+## Decompose the data 
+
+We attempt to decompose the data to its components, the trend, the seasonal and the random component. 
+
+```{r}
+air_decomp <- decompose(air)
+plot(air_decomp)
+```
+
+## Stationarize the time series 
+
+We have two issues with the time series. 
+1. The unequal variances 
+2. The trend component. 
+
+We remove the unequal variances using the log of the series, we take the difference of the series to address the trend component. 
+
+We find out how many differences are needed to make the dtime series stationary. 
+```{r}
+ndiffs(air)
+```
+We need one difference to make our time series stationary. 
+
+We test the new time series. 
+```{r}
+adf.test(diff(log(air)), alternative = "stationary", k =0)
+```
+We can see that the null hypothesis is rejected, with p-value = 0.01, as a result the timeseries are significantly stationary. 
+
+## ACF/PCAF plots and find optimal parameters 
+
+Next, we have to find the optimal parameters to be used in the ARIMA model. 
+We know that the d parameter is equal to 1 (d = 1) as we needed one difference to make the time series stationary. 
+
+We make ACF and PACF plots for the stationarized data. 
+
+```{r}
+tsdisplay(diff(log(air)), main = "Stationarized Time Series")
+```
+
+It can be seen that the residual seem to have the same variance over time. 
+However, in the ACF plot it can be seen that there is still seasonality present. The time series needs to be de-seasonalized before deciding on possible parameters p (AR order) and q (MA order) from the PACF and ACF plots respectively. 
+
+To exclude seasonality from our series we use the random component of the decomposed series. 
+
+```{r}
+tsdisplay(decompose(log(air))$random, main = "Random component of stationarized time series")
+```
+
+The p and q factors cannot be decides solely from the ACF and PACF plots, so we will use the auto.arima function to find the combination of p, d and q parameters, which minimizes the AIC and BIC criteria, knowing that d = 1.  
+
+```{r}
+arimaMod <- auto.arima(log(air), d=1)
+arimaMod
+```
+
+We found that p = 0, d = 1 and q = 1 is the combination with the least AIC and BIC. Also,we can see that the model has a seasonal difference of frequency equal to 12. 
+
+## White Noise 
+
+We want to check if the residual of the model is white noise, which is an indicator of the good fit of model. 
+
+```{r}
+tsdisplay(arimaMod$residuals)
+```
+
+In the ACF and PACF plots of the residuals we can safely assume they are white noise, as the most of them are between the blue lines, which means they are not significally different from zero. 
+
+## Prediction 
+
+Using the model we created above, we will predict the number of Air Passengers for the next ten years and we present a plot of the actual timeseries and the forecast. 
+
+```{r}
+pred <- predict(arimaMod, n.ahead = 120)
+ts.plot(air,2.718^pred$pred, log = "y", lty = c(1,3), col = c("black", "red"), ylab = "Number of Air Passengers", main = "Actual and 10-year Forecast Number of the Air Passengers")
+legend("topleft", legend = c("Actual", "Forecast"), col = c("black", "red"), lty = c(1,3))
+```
+
